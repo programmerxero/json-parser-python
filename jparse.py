@@ -42,18 +42,13 @@ def tokenize(json_str):
         i += 1
     return tokens
 
-def loads(json_str):
-    data = {"data": None}
-    tokens = tokenize(json_str) # get tokens
-    if len(tokens) == 0:
-        return data
-    print(tokens)
+def get_lexical_plan(tokens): 
     stack = [] # lexical analysis
     openers = ["{", "["]
     closers = ["}", "]"]
     if tokens[0] not in openers:
         raise JsonDecodeError(UNEXPECTED_TOKEN.format(tokens[0]))
-    combination_list = []
+    lexical_plan = []
     stack.append((0, tokens[0]))
     for index, token in enumerate(tokens[1:], 1):
         if token in openers:
@@ -66,5 +61,16 @@ def loads(json_str):
             if stack[-1][1] != openers[closers.index(token)]:
                 raise JsonDecodeError(NEVER_CLOSED.format(stack.pop()[1]))
             opener = stack.pop()
-            combination_list.append((opener[0], index, "ol"[openers.index(opener[1])]))
-    return combination_list
+            lexical_plan.append((opener[0], index, "ol"[openers.index(opener[1])]))
+    if len(stack) > 0:
+        raise JsonDecodeError(NEVER_CLOSED.format(stack[-1][1]))
+    return lexical_plan
+
+def loads(json_str):
+    data = {"data": None}
+    tokens = tokenize(json_str) # get tokens
+    if len(tokens) == 0:
+        return data
+
+    lexical_plan = get_lexical_plan(tokens) # object blueprint
+    return lexical_plan
