@@ -1,3 +1,6 @@
+UNEXPECTED_TOKEN = "Unexpected token: {}"
+NEVER_CLOSED = "{} was never closed"
+
 class JsonDecodeError(Exception):
     # costum exception class for json decoding
     def __init__(self, msg):
@@ -5,6 +8,9 @@ class JsonDecodeError(Exception):
         self.message = msg
 
 def tokenize(json_str):
+    """
+    takes a json string and returns a lit of possible tokens
+    """
     tokens = []
     special_characters = "{}[],:"
     whitespace_characters = "\n\t \r"
@@ -38,43 +44,27 @@ def tokenize(json_str):
 
 def loads(json_str):
     data = {"data": None}
-    container_openers = ["{", "["]
-    container_closers = ["}", "]"]
-    stack = [] # container checking
-    i = 0 # traversal index
-    str_len = len(json_str)
-
-    while i < str_len and json_str[i].isspace(): # neglect starting white space
-        i += 1
-   
-    # no data
-    if i >= str_len:
+    tokens = tokenize(json_str) # get tokens
+    if len(tokens) == 0:
         return data
-    
-    # 0 for dict, 1 for array, -1 out of bounds
-    state = -1
-
-    # check outer container
-    if json_str[i] not in container_openers:
-        raise JsonDecodeError(f"Invalid starting character {json_str[i]}")
-    
-    # traverse the string
-    while i < str_len:
-        if json_str[i] in container_openers: # add container to stack
-            if state >= 0 and len(stack) <= 0:
-                raise JsonDecodeError(f"Unexpected character {json_str[i]}")
-            stack.append(json_str[i])
-            state = container_openers.index(json_str[i])
-        elif json_str[i] in container_closers: # close container
-            if len(stack) < 1:
-                raise JsonDecodeError(f"Unexpected character {json_str[i]}")
-            elif stack[-1] != container_openers[container_closers.index(json_str[i])]:
-                raise JsonDecodeError(f"{stack.pop()} was never closed")
-            stack.pop()
-        i += 1
-    
-    # check valid encapsulation
-    if len(stack) > 0:
-        raise JsonDecodeError(f"{stack.pop()} was never closed")
-
-    return data
+    print(tokens)
+    stack = [] # lexical analysis
+    openers = ["{", "["]
+    closers = ["}", "]"]
+    if tokens[0] not in openers:
+        raise JsonDecodeError(UNEXPECTED_TOKEN.format(tokens[0]))
+    combination_list = []
+    stack.append((0, tokens[0]))
+    for index, token in enumerate(tokens[1:], 1):
+        if token in openers:
+            if len(stack) == 0:
+                raise JsonDecodeError(UNEXPECTED_TOKEN.format(token))
+            stack.append((index, token))
+        elif token in closers:
+            if len(stack) == 0:
+                raise JsonDecodeError(UNEXPECTED_TOKEN.format(token))
+            if stack[-1][1] != openers[closers.index(token)]:
+                raise JsonDecodeError(NEVER_CLOSED.format(stack.pop()[1]))
+            opener = stack.pop()
+            combination_list.append((opener[0], index, "ol"[openers.index(opener[1])]))
+    return combination_list
