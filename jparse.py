@@ -1,5 +1,7 @@
 UNEXPECTED_TOKEN = "Unexpected token: {}"
+UNEXPECTED_TOKEN_AFTER = UNEXPECTED_TOKEN + " after {}"
 NEVER_CLOSED = "{} was never closed"
+SPECIAL_VALUES = {"true": True, "false": False, "null": None}
 
 class JsonDecodeError(Exception):
     # costum exception class for json decoding
@@ -45,17 +47,38 @@ def tokenize(json_str):
 def create_list_from_tokens(tokens, lexical_plan):
     lst = []
     i = 1 # token traversal pointer
+    seen_value = False
     while i < len(tokens) - 1:
-        if tokens[i] == "[":
+        if tokens[i] == "[": # array
+            if seen_value:
+                raise JsonDecodeError(UNEXPECTED_TOKEN_AFTER.format(tokens[i], tokens[i - 1]))
             list_plan = lexical_plan.pop(0) # remove blueprint form queue
             lst.append(create_list_from_tokens(tokens[list_plan[0]: list_plan[1] + 1], lexical_plan))
+            seen_value = True
             i = list_plan[1]
-            print(tokens[list_plan[0]: list_plan[1] + 1])
-        elif tokens[i] == "{":
+        elif tokens[i] == "{": #object
+            if seen_value:
+                raise JsonDecodeError(UNEXPECTED_TOKEN_AFTER.format(tokens[i], tokens[i - 1]))
             list_plan = lexical_plan.pop(0) # remove blueprint form queue
             lst.append(create_dict_from_tokens(tokens[list_plan[0] + 1: list_plan[1] + 1], lexical_plan))
+            seen_value = True
             i = list_plan[1]
+        elif tokens[i] in SPECIAL_VALUES: # special values
+            if seen_value:
+                raise JsonDecodeError(UNEXPECTED_TOKEN_AFTER.format(tokens[i], tokens[i - 1]))
+            lst.append(SPECIAL_VALUES[tokens[i]])
+            seen_value = True
+        elif tokens[i] == ",": # comma
+            if (not seen_value):
+                raise JsonDecodeError(UNEXPECTED_TOKEN_AFTER.format(tokens[i], tokens[i - 1]))
+            seen_value = False
+        else: #Base case FOR NOW TODO: update
+            if seen_value:
+                raise JsonDecodeError(UNEXPECTED_TOKEN_AFTER.format(tokens[i], tokens[i - 1]))
+            seen_value = True
         i += 1
+    if len(lst) > 0 and not seen_value: #check for trailing comma
+        raise JsonDecodeError(UNEXPECTED_TOKEN_AFTER.format(tokens[i], tokens[i - 1]))
     return lst
 
 def create_dict_from_tokens(tokens, lexical_plan):
@@ -93,7 +116,6 @@ def loads(json_str):
         return data
 
     lexical_plan = sorted(get_lexical_plan(tokens), key=lambda x: x[0]) # object blueprint
-    print(lexical_plan)
     if tokens[0] == "[": # outer list
         data["data"] = create_list_from_tokens(tokens, lexical_plan[1:])
     elif tokens[0] == "{": # outer obj
