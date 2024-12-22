@@ -42,6 +42,26 @@ def tokenize(json_str):
         i += 1
     return tokens
 
+def create_list_from_tokens(tokens, lexical_plan):
+    lst = []
+    i = 1 # token traversal pointer
+    while i < len(tokens) - 1:
+        if tokens[i] == "[":
+            list_plan = lexical_plan.pop(0) # remove blueprint form queue
+            lst.append(create_list_from_tokens(tokens[list_plan[0]: list_plan[1] + 1], lexical_plan))
+            i = list_plan[1]
+            print(tokens[list_plan[0]: list_plan[1] + 1])
+        elif tokens[i] == "{":
+            list_plan = lexical_plan.pop(0) # remove blueprint form queue
+            lst.append(create_dict_from_tokens(tokens[list_plan[0] + 1: list_plan[1] + 1], lexical_plan))
+            i = list_plan[1]
+        i += 1
+    return lst
+
+def create_dict_from_tokens(tokens, lexical_plan):
+    dic = {}
+    return dic
+
 def get_lexical_plan(tokens): 
     stack = [] # lexical analysis
     openers = ["{", "["]
@@ -61,7 +81,7 @@ def get_lexical_plan(tokens):
             if stack[-1][1] != openers[closers.index(token)]:
                 raise JsonDecodeError(NEVER_CLOSED.format(stack.pop()[1]))
             opener = stack.pop()
-            lexical_plan.append((opener[0], index, "ol"[openers.index(opener[1])]))
+            lexical_plan.append((opener[0], index))
     if len(stack) > 0:
         raise JsonDecodeError(NEVER_CLOSED.format(stack[-1][1]))
     return lexical_plan
@@ -72,5 +92,10 @@ def loads(json_str):
     if len(tokens) == 0:
         return data
 
-    lexical_plan = get_lexical_plan(tokens) # object blueprint
-    return lexical_plan
+    lexical_plan = sorted(get_lexical_plan(tokens), key=lambda x: x[0]) # object blueprint
+    print(lexical_plan)
+    if tokens[0] == "[": # outer list
+        data["data"] = create_list_from_tokens(tokens, lexical_plan[1:])
+    elif tokens[0] == "{": # outer obj
+        data["data"] = create_dict_from_tokens(tokens, lexical_plan[1:])
+    return data
