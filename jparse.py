@@ -1,7 +1,10 @@
+from re import fullmatch
+
 UNEXPECTED_TOKEN = "Unexpected token: {}"
 UNEXPECTED_TOKEN_AFTER = UNEXPECTED_TOKEN + " after {}"
 NEVER_CLOSED = "{} was never closed"
 SPECIAL_VALUES = {"true": True, "false": False, "null": None}
+SPECIAL_TOKENS = "[]{},:"
 
 class JsonDecodeError(Exception):
     # costum exception class for json decoding
@@ -109,4 +112,23 @@ def tokenize(json_str):
             continue
         i += 1
     return tokens
+
+def is_valid_json_number(token):
+    return fullmatch(r'^-?(0|[1-9]\d*)(\.\d+)?([eE][-+]?\d+)?$') is not None
+
+def convert_to_python_number(token):
+    try: # integer
+        return int(token)
+    except ValueError:
+        pass
+    try: # float
+        return float(token)
+    except ValueError:
+        pass
+    try: # complex
+        return complex(token)
+    except ValueError:
+        pass
+    return None
+
 #TODO implement from_string
