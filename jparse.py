@@ -158,33 +158,26 @@ def create_list_from_tokens(tokens):
                     lst.append(create_dict_from_tokens(tokens[start_tkn[1] + 1: idx]))
             else:
                 raise JsonDecodeError(NEVER_CLOSED.format(start_tkn[0]))
-        elif tkn == ",": # comma
-            if len(stack) > 0:
-                continue
-            if not seen_value:
-                raise JsonDecodeError(UNEXPECTED_TOKEN.format(tkn))
-            seen_value = False
-        elif tkn in SPECIAL_VALUES:
-            if len(stack) > 0:
-                continue
-            if seen_value:
-                raise JsonDecodeError(UNEXPECTED_TOKEN.format(tkn))
-            seen_value = True
-            lst.append(SPECIAL_VALUES[tkn])
-        elif is_valid_json_number(tkn):
-            if len(stack) > 0:
-                continue
-            if seen_value:
-                raise JsonDecodeError(UNEXPECTED_TOKEN.format(tkn))
-            seen_value = True
-            lst.append(convert_to_python_number(tkn))
-        else:
-            if len(stack) > 0:
-                continue
-            if seen_value:
-                raise JsonDecodeError(UNEXPECTED_TOKEN.format(tkn))
-            seen_value = True
-            lst.append(convert_to_python_string(tkn))
+        elif len(stack) == 0:
+            if tkn == ",": # comma
+                if not seen_value:
+                    raise JsonDecodeError(UNEXPECTED_TOKEN.format(tkn))
+                seen_value = False
+            elif tkn in SPECIAL_VALUES:
+                if seen_value:
+                    raise JsonDecodeError(UNEXPECTED_TOKEN.format(tkn))
+                seen_value = True
+                lst.append(SPECIAL_VALUES[tkn])
+            elif is_valid_json_number(tkn):
+                if seen_value:
+                    raise JsonDecodeError(UNEXPECTED_TOKEN.format(tkn))
+                seen_value = True
+                lst.append(convert_to_python_number(tkn))
+            else:
+                if seen_value:
+                    raise JsonDecodeError(UNEXPECTED_TOKEN.format(tkn))
+                seen_value = True
+                lst.append(convert_to_python_string(tkn))
 
     if len(stack) > 0:
         raise JsonDecodeError(NEVER_CLOSED.format(stack.pop()[0]))
