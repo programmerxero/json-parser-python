@@ -1,10 +1,8 @@
 from re import fullmatch
 
 UNEXPECTED_TOKEN = "Unexpected token: {}"
-UNEXPECTED_TOKEN_AFTER = UNEXPECTED_TOKEN + " after {}"
 NEVER_CLOSED = "{} was never closed"
 SPECIAL_VALUES = {"true": True, "false": False, "null": None}
-SPECIAL_TOKENS = "[]{},:"
 
 class JsonDecodeError(Exception):
     # costum exception class for json decoding
@@ -114,7 +112,7 @@ def tokenize(json_str):
     return tokens
 
 def is_valid_json_number(token):
-    return fullmatch(r'^-?(0|[1-9]\d*)(\.\d+)?([eE][-+]?\d+)?$') is not None
+    return fullmatch(r'^-?(0|[1-9]\d*)(\.\d+)?([eE][-+]?\d+)?$', token) is not None
 
 def convert_to_python_number(token):
     try: # integer
@@ -131,4 +129,122 @@ def convert_to_python_number(token):
         pass
     return None
 
-#TODO implement from_string
+def create_list_from_tokens(tokens):
+    lst = []
+    stack = [] # lexical state
+    
+    seen_value = False
+
+    for idx, tkn in enumerate(tokens, 0):
+        if tkn == "[" or tkn == "{": # opening token
+            stack.append((tkn, idx))
+        elif tkn == "]": # list
+            if len(stack) == 0:
+                raise JsonDecodeError(UNEXPECTED_TOKEN.format(tkn))
+            start_tkn = stack.pop()
+            if start_tkn[0] == "[":
+                if len(stack) == 0:
+                    seen_value = True
+                    lst.append(create_list_from_tokens(tokens[start_tkn[1] + 1: idx]))
+            else:
+                raise JsonDecodeError(NEVER_CLOSED.format(start_tkn[0]))
+        elif tkn == "}": # dict
+            if len(stack) == 0:
+                raise JsonDecodeError(UNEXPECTED_TOKEN.format(tkn))
+            start_tkn = stack.pop()
+            if start_tkn[0] == "{":
+                if len(stack) == 0:
+                    seen_value = True
+                    lst.append(create_dict_from_tokens(tokens[start_tkn[1] + 1: idx]))
+            else:
+                raise JsonDecodeError(NEVER_CLOSED.format(start_tkn[0]))
+        elif tkn == ",": # comma
+            if len(stack) > 0:
+                continue
+            if not seen_value:
+                raise JsonDecodeError(UNEXPECTED_TOKEN.format(tkn))
+            seen_value = False
+        elif tkn in SPECIAL_VALUES:
+            if len(stack) > 0:
+                continue
+            if seen_value:
+                raise JsonDecodeError(UNEXPECTED_TOKEN.format(tkn))
+            seen_value = True
+            lst.append(SPECIAL_VALUES[tkn])
+        elif is_valid_json_number(tkn):
+            if len(stack) > 0:
+                continue
+            if seen_value:
+                raise JsonDecodeError(UNEXPECTED_TOKEN.format(tkn))
+            seen_value = True
+            lst.append(convert_to_python_number(tkn))
+        else:
+            if len(stack) > 0:
+                continue
+            if seen_value:
+                raise JsonDecodeError(UNEXPECTED_TOKEN.format(tkn))
+            seen_value = True
+            lst.append(convert_to_python_string(tkn))
+
+    if len(stack) > 0:
+        raise JsonDecodeError(NEVER_CLOSED.format(stack.pop()[0]))
+    
+    if len(lst) > 0 and not seen_value:
+        raise JsonDecodeError("Unexpected trailing ,")
+
+    return lst
+
+def create_dict_from_tokens(tokens):
+    #TODO: make this for dict
+    dic = {}
+    stack = [] # lexical state
+
+    for idx, tkn in enumerate(tokens, 0):
+        if tkn == "[" or tkn == "{": # opening token
+            stack.append((tkn, idx))
+        elif tkn == "]": # append list
+            if len(stack) == 0:
+                raise JsonDecodeError(UNEXPECTED_TOKEN.format(tkn))
+            start_tkn = stack.pop()
+            if start_tkn[0] == "[":
+                if len(stack) == 0:
+                    lst.append(create_list_from_tokens(tokens[start_tkn[1] + 1: idx]))
+            else:
+                raise JsonDecodeError(NEVER_CLOSED.format(start_tkn[0]))
+        elif tkn == "}": # append dict
+            if len(stack) == 0:
+                raise JsonDecodeError(UNEXPECTED_TOKEN.format(tkn))
+            start_tkn = stack.pop()
+            if start_tkn[0] == "{":
+                if len(stack) == 0:
+                    lst.append(create_dict_from_tokens(tokens[start_tkn[1] + 1: idx]))
+            else:
+                raise JsonDecodeError(NEVER_CLOSED.format(start_tkn[0]))
+    if len(stack) > 0:
+        raise JsonDecodeError(NEVER_CLOSED.format(stack.pop()[0]))
+    
+    return dic
+
+def loads(string):
+    data = {"data": None, "type": None}
+    
+    tokens = tokenize(string)
+    if len(tokens) == 0: # no tokens
+        return data
+    
+    if tokens[0] == "[":
+        if tokens[-1] == "]":
+            data["data"] = create_list_from_tokens(tokens[1:-1])
+            data["type"] = "list"
+        else:
+            raise JsonDecodeError(NEVER_CLOSED.format(tokens[0]))
+    elif tokens[0] == "{":
+        if tokens[-1] == "}":
+            data["data"] = create_dict_from_tokens(tokens[1:-1])
+            data["type"] = "dict"
+        else:
+            raise JsonDecodeError(NEVER_CLOSED.format(tokens[0]))
+    else:
+        raise JsonDecodeError(UNEXPECTED_TOKEN.format(tokens[0]))
+
+    return data
