@@ -188,34 +188,77 @@ def create_list_from_tokens(tokens):
     return lst
 
 def create_dict_from_tokens(tokens):
-    #TODO: make this for dict
     dic = {}
     stack = [] # lexical state
+    
+    is_seperated = False
+    seen_value = False
+    key = None
 
     for idx, tkn in enumerate(tokens, 0):
         if tkn == "[" or tkn == "{": # opening token
             stack.append((tkn, idx))
-        elif tkn == "]": # append list
+        elif tkn == "]": # list
             if len(stack) == 0:
                 raise JsonDecodeError(UNEXPECTED_TOKEN.format(tkn))
             start_tkn = stack.pop()
             if start_tkn[0] == "[":
                 if len(stack) == 0:
-                    lst.append(create_list_from_tokens(tokens[start_tkn[1] + 1: idx]))
+                    if not seen_value and key is not None and is_seperated:
+                        seen_value = True
+                        dic[key] = create_list_from_tokens(tokens[start_tkn[1] + 1: idx])
+                    else:
+                        raise JsonDecodeError(UNEXPECTED_TOKEN.format(tkn))
             else:
                 raise JsonDecodeError(NEVER_CLOSED.format(start_tkn[0]))
-        elif tkn == "}": # append dict
+        elif tkn == "}": # dict
             if len(stack) == 0:
                 raise JsonDecodeError(UNEXPECTED_TOKEN.format(tkn))
             start_tkn = stack.pop()
             if start_tkn[0] == "{":
                 if len(stack) == 0:
-                    lst.append(create_dict_from_tokens(tokens[start_tkn[1] + 1: idx]))
+                    if not seen_value and key is not None and is_seperated:
+                        seen_value = True
+                        dic[key] = create_dict_from_tokens(tokens[start_tkn[1] + 1: idx])
+                    else:
+                        raise JsonDecodeError(UNEXPECTED_TOKEN.format(tkn))
             else:
                 raise JsonDecodeError(NEVER_CLOSED.format(start_tkn[0]))
+        elif len(stack) == 0:
+            if tkn == ":": # seperator
+                if key is None or is_seperated or seen_value:
+                    raise JsonDecodeError(UNEXPECTED_TOKEN.format(tkn))
+                is_seperated = True
+            elif tkn == ",": # comma
+                if key is None or not is_seperated or not seen_value:
+                    raise JsonDecodeError(UNEXPECTED_TOKEN.format(tkn))
+                seen_value = is_seperated = False
+                key = None
+            elif tkn in SPECIAL_VALUES:
+                if seen_value or key is None or not is_seperated:
+                    raise JsonDecodeError(UNEXPECTED_TOKEN.format(tkn))
+                seen_value = True
+                dic[key] = SPECIAL_VALUES[tkn]
+            elif is_valid_json_number(tkn):
+                if seen_value or key is None or not is_seperated:
+                    raise JsonDecodeError(UNEXPECTED_TOKEN.format(tkn))
+                seen_value = True
+                dic[key] = convert_to_python_number(tkn)
+            else:
+                if key is None:
+                    key = convert_to_python_string(tkn)
+                    continue
+                if seen_value or key is None or not is_seperated:
+                    raise JsonDecodeError(UNEXPECTED_TOKEN.format(tkn))
+                seen_value = True
+                dic[key] = convert_to_python_string(tkn)
+
     if len(stack) > 0:
         raise JsonDecodeError(NEVER_CLOSED.format(stack.pop()[0]))
     
+    if len(dic.keys()) > 0 and not seen_value:
+        raise JsonDecodeError("Unexpected trailing ,")
+
     return dic
 
 def loads(string):
